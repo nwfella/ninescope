@@ -101,6 +101,9 @@ nothing. Delete it to force a cold rebuild.
   `clear` vs `untracked` correctly; SSRF guard refuses metadata, `file://`, private ranges
   and loopback-by-name in default mode; no overflow at 320/390/1024/1500 px; zero console
   errors. Screenshots land in `artifacts/`.
+- `scripts/live_check.js` — 9 assertions against the **deployed** URL: the served page boots,
+  the dataset arrives over the network, 40 rows render, the sparkline paints, zero console
+  errors. `npm run verify:live`.
 
 ## Known limits
 

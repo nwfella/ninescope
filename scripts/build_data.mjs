@@ -211,9 +211,16 @@ const cwesOf = (cve) =>
     .filter((v) => /^CWE-\d+$/.test(v))
     .slice(0, 3);
 
+/** NVD stores some descriptions with HTML entities already escaped ("IM &amp; P").
+ *  Decode them here so the client's esc() is the single escaping step — otherwise
+ *  the entity is escaped twice and renders literally as "&amp;". */
+const decodeEntities = (t) => t
+  .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"')
+  .replace(/&#0?39;|&apos;/g, "'").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
+
 const descOf = (cve, max = 400) => {
   const en = (cve.descriptions || []).find((d) => d.lang === "en") || (cve.descriptions || [])[0];
-  const t = (en?.value || "").replace(/\s+/g, " ").trim();
+  const t = decodeEntities((en?.value || "").replace(/\s+/g, " ").trim());
   return t.length > max ? t.slice(0, max - 1).trimEnd() + "…" : t;
 };
 

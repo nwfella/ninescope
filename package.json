@@ -4,7 +4,9 @@
   "private": true,
   "description": "CVSS 9.0+ vulnerability monitor with a non-intrusive tech-stack exposure scanner",
   "license": "MIT",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node server.js",
     "build": "node scripts/build_data.mjs",
@@ -12,6 +14,7 @@
     "probe": "node scripts/probe_sites.mjs",
     "verify": "node scripts/verify_app.js",
     "verify:browser": "node scripts/browser_check.js",
-    "verify:all": "node scripts/verify_app.js && node scripts/browser_check.js"
+    "verify:all": "node scripts/verify_app.js && node scripts/browser_check.js",
+    "verify:live": "node scripts/live_check.js --url=https://nwfella.github.io/ninescope/"
   }
 }
