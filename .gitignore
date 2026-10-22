@@ -1,0 +1,6 @@
+# scratch and test output — the baked dataset IS committed (GitHub Pages serves it)
+.cache/
+artifacts/
+node_modules/
+*.log
+.DS_Store
