@@ -1,0 +1,31 @@
+{
+  "builtAt": "2026-10-22T08:54:32.722Z",
+  "minScore": 9,
+  "monitorWindowMonths": 24,
+  "monitorWindowFrom": "2024-10-21",
+  "indexYears": 8,
+  "indexFrom": "2018-10-22",
+  "counts": {
+    "criticalAllTime": 21358,
+    "criticalInWindow": 2599,
+    "kevTracked": 396,
+    "kevCatalogue": 1754,
+    "indexedProducts": 62,
+    "indexedProductCves": 485
+  },
+  "sources": [
+    {
+      "name": "NVD CVE API 2.0",
+      "url": "https://services.nvd.nist.gov/rest/json/cves/2.0",
+      "note": "CVSS v3 CRITICAL over the last 8 years, 25 windows",
+      "lastUpdated": "2026-10-22T08:54:32.727Z"
+    },
+    {
+      "name": "CISA Known Exploited Vulnerabilities",
+      "url": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+      "note": "1754 entries, catalogue released 2026-10-21T14:04:39.8983Z",
+      "lastUpdated": "2026-10-21T14:04:39.8983Z"
+    }
+  ],
+  "buildSeconds": 24
+}

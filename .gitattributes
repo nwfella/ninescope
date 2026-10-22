@@ -1,0 +1,6 @@
+# Keep the working tree byte-identical to what the repo stores, so a deploy can
+# be verified by hashing the served file against the local one.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
