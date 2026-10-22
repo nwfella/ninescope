@@ -17,7 +17,7 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -37,6 +37,8 @@ jobs:
         env:
           # optional: lifts NVD's rate limit from 5 to 50 requests / 30 s
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+          # runner IPs get cut off on 500-record pages; 200 is reliably delivered
+          NVD_PAGE_SIZE: "200"
         run: node scripts/build_data.mjs
 
       - name: verify (tier 1)

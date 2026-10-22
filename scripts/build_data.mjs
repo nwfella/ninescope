@@ -117,7 +117,9 @@ async function getJSON(url, { tries = 4, label = url, timeout = 90_000 } = {}) {
 /** NVD pages are immutable, so cache them: iteration stops costing rate limit. */
 fs.mkdirSync(CACHE, { recursive: true });
 
-const PAGE = 500;          // NVD truncates a response at ~90 s; 500 records (~3.4 MB) is the reliable ceiling
+// NVD truncates a response at ~90 s. 500 records (~3.4 MB) is the ceiling from a
+// residential line; datacenter IPs are cut sooner, so CI sets NVD_PAGE_SIZE.
+const PAGE = Math.max(50, Number(process.env.NVD_PAGE_SIZE || 500));
 const CONCURRENCY = 5;     // NVD allows 5 requests / 30 s keyless, 50 with a key
 const FETCH_TIMEOUT = 180_000;
 let fetches = 0;
@@ -127,18 +129,68 @@ function cachePath(tag, startIndex, page) {
   return path.join(CACHE, `nvd-${tag}-${page}-${startIndex}.json`);
 }
 
+/* ------------------------------ NVD rate gate -----------------------------
+ * NVD enforces 5 requests / 30 s keyless (50 with a key). Firing a batch and
+ * then sleeping only works when each request happens to take a minute — from a
+ * datacenter the requests come back fast, the burst breaks the limit, and NVD
+ * terminates the connection mid-body ("terminated"). Gate every start instead,
+ * so the limit holds regardless of how quickly responses arrive.
+ * ------------------------------------------------------------------------- */
+const RATE_LIMIT = API_KEY ? 50 : 5;
+const RATE_WINDOW = 30_000;
+const startLog = [];
+let gateChain = Promise.resolve();
+
+function gate() {
+  const p = gateChain.then(async () => {
+    for (;;) {
+      const now = Date.now();
+      while (startLog.length && now - startLog[0] > RATE_WINDOW) startLog.shift();
+      if (startLog.length < RATE_LIMIT) { startLog.push(now); return; }
+      await sleep(RATE_WINDOW - (now - startLog[0]) + 300);
+    }
+  });
+  gateChain = p.catch(() => {});
+  return p;
+}
+
 async function nvdPage(startIndex, params, tag, page = PAGE) {
   const file = cachePath(tag, startIndex, page);
   if (fs.existsSync(file)) {
     try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { fs.unlinkSync(file); }
   }
   if (MAX_FETCHES && fetches >= MAX_FETCHES) { const e = new Error("fetch budget reached"); e.budget = true; throw e; }
+  await gate();
   const qs = new URLSearchParams({ ...params, resultsPerPage: String(page), startIndex: String(startIndex) });
-  const json = await getJSON(`${NVD}?${qs}`, { label: `nvd ${tag}@${startIndex}`, timeout: FETCH_TIMEOUT });
+  const json = await getJSON(`${NVD}?${qs}`, { label: `nvd ${tag}@${startIndex}`, timeout: FETCH_TIMEOUT, tries: 2 });
   if (!Array.isArray(json.vulnerabilities)) throw new Error(`nvd ${tag}@${startIndex}: malformed payload`);
   fetches++;
   fs.writeFileSync(file, JSON.stringify(json));
   return json;
+}
+
+/**
+ * Open a window, choosing the largest page size NVD will actually deliver.
+ * NVD truncates a response at ~90 s; from a datacenter a 500-record page is cut
+ * off mid-body, so a failure steps down the size and re-probes. The size that
+ * works is then used for every page of that window, which keeps startIndex
+ * offsets consistent (a mid-window size change would skip records).
+ */
+async function openWindow(params, tag) {
+  let lastErr;
+  const ladder = [...new Set([PAGE, Math.floor(PAGE / 2), Math.floor(PAGE / 4), 75])].filter((n) => n >= 50);
+  for (const size of ladder) {
+    try {
+      const first = await nvdPage(0, params, tag, size);
+      return { size, first };
+    } catch (e) {
+      if (e.budget) throw e;
+      lastErr = e;
+      console.warn(`  ${tag}: page size ${size} failed (${e.message}) — stepping down`);
+      await sleep(2_000);
+    }
+  }
+  throw lastErr;
 }
 
 /** Params for one 120-day, CRITICAL-only window (NVD's hard limit per query). */
@@ -151,18 +203,20 @@ const winParams = (s0, e0) => ({ pubStartDate: s0, pubEndDate: e0, cvssV3Severit
  * Returns array (same order as `group`) of {total, got, records}.
  */
 async function collectGroup(group) {
-  const firsts = await Promise.allSettled(group.map((g) => nvdPage(0, winParams(g.s, g.e), g.tag)));
+  const opened = await Promise.allSettled(group.map((g) => openWindow(winParams(g.s, g.e), g.tag)));
   const out = [];
   const extra = [];
   for (let i = 0; i < group.length; i++) {
-    const r = firsts[i];
+    const r = opened[i];
     if (r.status === "rejected") throw r.reason;
-    out[i] = { total: r.value.totalResults, got: r.value.vulnerabilities.length, records: [...r.value.vulnerabilities] };
-    for (let p = PAGE; p < r.value.totalResults; p += PAGE) extra.push({ i, p });
+    const { size, first } = r.value;
+    out[i] = { total: first.totalResults, got: first.vulnerabilities.length, size, records: [...first.vulnerabilities] };
+    for (let p = size; p < first.totalResults; p += size) extra.push({ i, p });
   }
   for (let k = 0; k < extra.length; k += CONCURRENCY) {
     const batch = extra.slice(k, k + CONCURRENCY);
-    const res = await Promise.allSettled(batch.map((j) => nvdPage(j.p, winParams(group[j.i].s, group[j.i].e), group[j.i].tag)));
+    const res = await Promise.allSettled(batch.map((j) =>
+      nvdPage(j.p, winParams(group[j.i].s, group[j.i].e), group[j.i].tag, out[j.i].size)));
     for (let m = 0; m < res.length; m++) {
       const r = res[m];
       if (r.status === "rejected") throw r.reason;
@@ -170,7 +224,6 @@ async function collectGroup(group) {
       slot.records.push(...r.value.vulnerabilities);
       slot.got += r.value.vulnerabilities.length;
     }
-    if (extra.length > CONCURRENCY) await sleep(API_KEY ? 800 : 2_000);
   }
   return out;
 }
@@ -279,6 +332,23 @@ export function cmpVersion(a, b) {
   return 0;
 }
 
+/** Bounded retry around a window group. Successful pages are cached, so a
+ *  retry only re-fetches what actually failed. Budget exhaustion propagates. */
+async function collectGroupWithRetry(group, attempts = 3) {
+  let lastErr;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await collectGroup(group);
+    } catch (e) {
+      if (e.budget) throw e;
+      lastErr = e;
+      console.warn(`  group @${group[0].tag}: attempt ${attempt}/${attempts} failed — ${e.message}`);
+      if (attempt < attempts) await sleep(15_000 * attempt);
+    }
+  }
+  throw new Error(`window ${group[0].tag} failed after ${attempts} attempts: ${lastErr && lastErr.message}`);
+}
+
 /* ------------------------------- main ------------------------------ */
 (async () => {
   const started = Date.now();
@@ -299,7 +369,7 @@ export function cmpVersion(a, b) {
   for (const group of groups) {
     let res;
     try {
-      res = await collectGroup(group);
+      res = await collectGroupWithRetry(group);
     } catch (e) {
       if (e.budget) {
         console.log(`
