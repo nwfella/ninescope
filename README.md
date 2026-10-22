@@ -87,6 +87,19 @@ no synthetic fallback anywhere — a failed source exits non-zero with nothing w
 Cache: `.cache/` holds every fetched NVD page, so re-runs are instant and a timeout costs
 nothing. Delete it to force a cold rebuild.
 
+**Scheduled refresh needs an NVD API key.** `.github/workflows/refresh.yml` re-bakes every
+6 hours, but NVD's keyless limit (5 requests / 30 s) is per source IP and GitHub runner IPs
+are throttled hard — a keyless CI run gets cut off mid-body and times out (the same build
+takes ~14 min from a residential IP). A key is free and instant:
+
+```bash
+# https://nvd.nist.gov/developers/request-an-api-key
+gh secret set NVD_API_KEY
+```
+
+Without the secret the job skips with a warning instead of failing, and the app's own
+header + Methodology tab keep showing the real data age.
+
 ## Verified, not asserted
 
 - `scripts/verify_app.js` — 118 assertions: CORE block is DOM-free and loads in Node;

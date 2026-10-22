@@ -1,7 +1,18 @@
 name: refresh-cve-data
 
 # Re-bakes the dataset from NVD + CISA KEV and commits it, so the Pages build
-# always serves current data. NVD publishes continuously; hourly is enough.
+# always serves current data.
+#
+# An NVD API key is REQUIRED for CI. NVD's keyless limit (5 requests / 30 s) is
+# per source IP, and GitHub-hosted runners share heavily-used addresses: a
+# keyless run gets throttled, pages are terminated mid-body, and the job crawls
+# until it times out. The same build takes ~14 minutes from a residential IP.
+# A key is free and instant, and gives 50 requests / 30 s bound to the key:
+#   https://nvd.nist.gov/developers/request-an-api-key
+#   gh secret set NVD_API_KEY
+#
+# Without the key the job skips instead of failing — the app shows its own data
+# age in the header and the Methodology tab, so staleness stays visible.
 on:
   schedule:
     - cron: "17 */6 * * *"      # every 6 hours
@@ -17,7 +28,7 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
@@ -25,8 +36,21 @@ jobs:
         with:
           node-version: "20"
 
-      # The cache makes a warm run take seconds; a cold run pages through NVD.
+      - name: check for an NVD API key
+        id: key
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          if [ -z "$NVD_API_KEY" ]; then
+            echo "::warning title=Refresh skipped::No NVD_API_KEY secret. Keyless NVD access is limited per source IP and GitHub runner IPs are throttled, so the bake would time out. Add a free key (https://nvd.nist.gov/developers/request-an-api-key) then run: gh secret set NVD_API_KEY"
+            echo "have_key=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "have_key=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Warm cache makes a re-run take seconds; a cold run pages through NVD.
       - name: restore NVD page cache
+        if: steps.key.outputs.have_key == '1'
         uses: actions/cache@v4
         with:
           path: .cache
@@ -34,24 +58,26 @@ jobs:
           restore-keys: nvd-cache-
 
       - name: build dataset
+        if: steps.key.outputs.have_key == '1'
         env:
-          # optional: lifts NVD's rate limit from 5 to 50 requests / 30 s
+          # 50 requests / 30 s instead of 5 — required, see the header note
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-          # runner IPs get cut off on 500-record pages; 200 is reliably delivered
-          NVD_PAGE_SIZE: "200"
+          NVD_PAGE_SIZE: "500"
         run: node scripts/build_data.mjs
 
       - name: verify (tier 1)
+        if: steps.key.outputs.have_key == '1'
         run: node scripts/verify_app.js
 
       - name: commit if the data moved
+        if: steps.key.outputs.have_key == '1'
         run: |
           git config user.name  "ninescope-bot"
           git config user.email "ninescope-bot@users.noreply.github.com"
-          if git diff --quiet -- public/data; then
+          if git diff --quiet -- docs/data; then
             echo "dataset unchanged — nothing to commit"
             exit 0
           fi
-          git add public/data
+          git add docs/data
           git commit -m "data: refresh criticals ($(date -u +%Y-%m-%dT%H:%MZ))"
           git push
