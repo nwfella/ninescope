@@ -28,7 +28,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const OUT = path.join(ROOT, "public", "data");
+const OUT = path.join(ROOT, "docs", "data");
 const CACHE = path.join(ROOT, ".cache");
 const UA = "ninescope/1.0 (+https://github.com/nwfella/ninescope) CVE-monitor";
 const NVD = "https://services.nvd.nist.gov/rest/json/cves/2.0";

@@ -14,11 +14,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const HTML = fs.readFileSync(path.join(ROOT, "public", "index.html"), "utf8");
+const HTML = fs.readFileSync(path.join(ROOT, "docs", "index.html"), "utf8");
 const CS = HTML.indexOf("/* CORE-START */"), CE = HTML.indexOf("/* CORE-END */");
 const CORE_SRC = HTML.slice(CS + "/* CORE-START */".length, CE);
 const Core = new Function(CORE_SRC + "\nreturn Core;")();
-const IDX = JSON.parse(fs.readFileSync(path.join(ROOT, "public", "data", "index.json"), "utf8"));
+const IDX = JSON.parse(fs.readFileSync(path.join(ROOT, "docs", "data", "index.json"), "utf8"));
 
 const args = process.argv.slice(2);
 const targets = args.length ? args : [

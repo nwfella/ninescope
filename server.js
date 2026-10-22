@@ -25,7 +25,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const PUB = path.join(ROOT, "public");
+const PUB = path.join(ROOT, "docs");
 const PORT = Number(process.env.PORT || 8119);
 const UA = "Mozilla/5.0 (compatible; NINESCOPE/1.0; +https://github.com/nwfella/ninescope) passive-stack-check";
 const MAX_BYTES = 2 * 1024 * 1024;

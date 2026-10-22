@@ -27,7 +27,7 @@ Node 20+. Zero runtime dependencies — no build step, no framework, no npm inst
 
 ```
 NVD API 2.0 ──┐
-              ├─ scripts/build_data.mjs ──> public/data/{monitor,index,meta}.json
+              ├─ scripts/build_data.mjs ──> docs/data/{monitor,index,meta}.json
 CISA KEV ─────┘                                   │
                                                   ▼
 browser ──GET /api/scan?url=──> collector ──> raw response ──> app: detect() ──> matchVulns()

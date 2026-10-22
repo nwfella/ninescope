@@ -21,9 +21,9 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const HTML = fs.readFileSync(path.join(ROOT, "public", "index.html"), "utf8");
-const MON = JSON.parse(fs.readFileSync(path.join(ROOT, "public", "data", "monitor.json"), "utf8"));
-const IDX = JSON.parse(fs.readFileSync(path.join(ROOT, "public", "data", "index.json"), "utf8"));
+const HTML = fs.readFileSync(path.join(ROOT, "docs", "index.html"), "utf8");
+const MON = JSON.parse(fs.readFileSync(path.join(ROOT, "docs", "data", "monitor.json"), "utf8"));
+const IDX = JSON.parse(fs.readFileSync(path.join(ROOT, "docs", "data", "index.json"), "utf8"));
 
 let pass = 0, fail = 0;
 const failures = [];
